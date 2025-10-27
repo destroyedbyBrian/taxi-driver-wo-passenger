@@ -5,7 +5,6 @@ import pygame
 from gymnasium.envs.registration import register
 
 
-# DEFINE THE ENVIRONMENT CLASS
 class MapEnv(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
 
@@ -17,6 +16,18 @@ class MapEnv(gym.Env):
         # Initialize driver and destination locations
         self._driver_location = np.array([-1, -1], dtype=np.int64)
         self._destination_location = np.array([-1, -1], dtype=np.int64)
+
+        # Initialize fixed obstacle
+        self._obstacles = [
+            np.array([3, 3]), 
+            np.array([3, 4]), 
+            np.array([4, 3]), 
+            np.array([4, 4]),
+            np.array([1, 6]),
+            np.array([2, 6]),
+            np.array([6, 1]),
+            np.array([6, 2]),
+        ]
 
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
@@ -52,17 +63,20 @@ class MapEnv(gym.Env):
             )
         }
 
-    # RESET FUNCTION
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
 
         # Randomly place driver location on Map
         self._driver_location = self.np_random.integers(0, self.size, size=2, dtype=np.int64)
 
+
+        while self._is_obstacle(self._driver_location):
+            self._driver_location = self.np_random.integers(0, self.size, size=2, dtype=np.int64)
+
         # Randomly place destination location on Map but not at the same position as driver
         self._destination_location = self._driver_location
         # Keep looping until a different location is found
-        while np.array_equal(self._destination_location, self._driver_location):
+        while np.array_equal(self._destination_location, self._driver_location) or self._is_obstacle(self._destination_location):
             self._destination_location = self.np_random.integers(0, self.size, size=2, dtype=np.int64)
 
         # Reset step counter for truncation handling
@@ -75,27 +89,51 @@ class MapEnv(gym.Env):
             self._render_frame()
 
         return observation, info
+    
+    def _is_obstacle(self, position):
+        for obstacle in self._obstacles:
+            if np.array_equal(position, obstacle):
+                return True
+        return False
 
-    # STEP FUNCTION
     def step(self, action: int):
         # Map action to direction
         direction = self._action_to_direction[action]
 
         # Update driver location with boundary checks
-        self._driver_location = np.clip(
+        new_location = np.clip(
             self._driver_location + direction, 0, self.size - 1
         )
+
+        hit_obstacle = self._is_obstacle(new_location)
+        if not hit_obstacle: 
+            self._driver_location = new_location
 
         # Check if agent reached the destination
         terminated = np.array_equal(self._driver_location, self._destination_location)
 
-        # Track steps and truncate if exceeding max_steps
         self.current_step += 1
-        truncated = self.current_step >= self.max_steps
 
-        # Reward structure
-        distance = np.linalg.norm(self._driver_location - self._destination_location)
-        reward = 100 if terminated else -0.01 * distance
+        # Calculate reward
+        if terminated:
+            # Success!
+            reward = 100
+            truncated = False
+        elif self._is_obstacle(self._driver_location):
+            # Somehow ended up on obstacle
+            reward = -100
+            truncated = True
+        else:
+            # Normal step: small penalty based on distance
+            distance = np.linalg.norm(self._driver_location - self._destination_location)
+            reward = -0.01 * distance
+            
+            # Extra penalty for trying to move into obstacle
+            if hit_obstacle:
+                reward -= 10
+            
+            # Check if max steps exceeded
+            truncated = self.current_step >= self.max_steps
 
         observation = self._get_obs()
         info = self._get_info()
@@ -125,7 +163,7 @@ class MapEnv(gym.Env):
             self.window_size / self.size
         )  # The size of a single grid square in pixels
 
-        # First we draw the target
+        # First we draw the destination
         pygame.draw.rect(
             canvas,
             (255, 0, 0),
@@ -134,6 +172,18 @@ class MapEnv(gym.Env):
                 (pix_square_size, pix_square_size),
             ),
         )
+
+        # Next, we draw the obstacles
+        for obstacle in self._obstacles:
+            pygame.draw.rect(
+                canvas,
+                (0, 0, 0),
+                pygame.Rect(
+                    pix_square_size * obstacle,
+                    (pix_square_size, pix_square_size),
+                ),
+            )
+
         # Now we draw the agent
         pygame.draw.circle(
             canvas,
