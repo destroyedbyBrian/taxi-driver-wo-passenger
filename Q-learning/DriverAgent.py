@@ -5,6 +5,7 @@ from collections import defaultdict
 from tqdm import tqdm
 from matplotlib import pyplot as plt
 from gymnasium.utils.env_checker import check_env
+from tqdm import tqdm
 
 
 class DriverAgent:
@@ -107,13 +108,40 @@ class DriverAgent:
         average_reward = np.mean(total_rewards)
         average_length = np.mean(episode_lengths)
 
-        # Use tqdm.write so these lines are printed cleanly when a tqdm progress
-        # bar is active (prevents them from being overwritten/hidden).
         tqdm.write(f"Test Results over {n_episodes} episodes:")
         tqdm.write(f"Success Rate: {success_rate:.1%}")
         tqdm.write(f"Average Reward: {average_reward:.3f}")
         tqdm.write(f"Average Episode Length: {average_length:.1f}")
         tqdm.write(f"Std Episode Length: {np.std(episode_lengths):.1f}")
+
+    def visualize_testing_progess(self, n_episodes=5):
+        render_env = MapEnv(render_mode="human")
+        old_epsilon = self.epsilon
+        self.epsilon = 0.0
+
+        for episode in range(n_episodes):
+            obs, info = render_env.reset()
+            episode_reward = 0
+            steps = 0
+            done = False
+            
+            print(f"\n=== Episode {episode + 1} ===")
+            print(f"Driver at: {obs['driver']}, Destination at: {obs['destination']}")
+            
+            while not done:
+                action = self.choose_action(obs)
+                obs, reward, terminated, truncated, info = render_env.step(action)
+                episode_reward += reward
+                steps += 1
+                done = terminated or truncated
+                
+            print(f"Episode finished in {steps} steps")
+            print(f"Total reward: {episode_reward:.2f}")
+            print(f"Success: {'Yes' if terminated or truncated else 'No'}")
+        
+        # Restore original epsilon
+        self.epsilon = old_epsilon
+        render_env.close()
 
 def get_moving_avgs(arr, window, convolution_mode):
         return np.convolve(
@@ -124,7 +152,7 @@ def get_moving_avgs(arr, window, convolution_mode):
 
 if __name__ == "__main__":
     n_episodes = 20000
-    env = MapEnv(size=8)
+    env = MapEnv(render_mode=None)
 
     agent = DriverAgent(
         env=env,
@@ -136,7 +164,7 @@ if __name__ == "__main__":
     )
 
     # TRAINING AGENT
-    for episode in tqdm(range(n_episodes), desc="Training", leave=True):
+    for episode in range(n_episodes):
         obs, info = env.reset()
         done = False
         while not done:
@@ -156,6 +184,8 @@ if __name__ == "__main__":
         agent.decay_epsilon()
 
 
-    # Run evaluation with exploration disabled
-    from tqdm import tqdm as _tqdm
+    # Run evaluation
     agent.test_agent(env, 100)
+
+    # Visualize testing progress
+    agent.visualize_testing_progess(10)
