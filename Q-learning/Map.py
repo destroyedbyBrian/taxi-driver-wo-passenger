@@ -1,16 +1,28 @@
 import gymnasium as gym
 import numpy as np
 from typing import Optional
+import pygame
+from gymnasium.envs.registration import register
+
 
 # DEFINE THE ENVIRONMENT CLASS
 class MapEnv(gym.Env):
-    def __init__(self, size: int = 8, max_steps: int = 100):
+    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
+
+    def __init__(self, size: int = 8, max_steps: int = 100, render_mode="human"):
         self.size = size
         self.max_steps = max_steps
-        
+        self.window_size = 512
+
         # Initialize driver and destination locations
         self._driver_location = np.array([-1, -1], dtype=np.int64)
         self._destination_location = np.array([-1, -1], dtype=np.int64)
+
+        assert render_mode is None or render_mode in self.metadata["render_modes"]
+        self.render_mode = render_mode
+
+        self.window = None
+        self.clock = None
 
         # Define observation space
         self.observation_space = gym.spaces.Dict({
@@ -21,7 +33,7 @@ class MapEnv(gym.Env):
         # Define actions
         self.action_space = gym.spaces.Discrete(4)
 
-        # Map action to a movement dirction
+        # Map action to a movement direction
         self._action_to_direction = {
             0: np.array([1, 0]),   # Move right (positive x)
             1: np.array([0, 1]),   # Move up (positive y)
@@ -59,6 +71,9 @@ class MapEnv(gym.Env):
         observation = self._get_obs()
         info = self._get_info()
 
+        if self.render_mode == "human":
+            self._render_frame()
+
         return observation, info
 
     # STEP FUNCTION
@@ -85,11 +100,87 @@ class MapEnv(gym.Env):
         observation = self._get_obs()
         info = self._get_info()
 
+        if self.render_mode == "human":
+            self._render_frame()
+
         return observation, reward, terminated, truncated, info
     
+    def render(self):
+        if self.render_mode == "rgb_array":
+            return self._render_frame()
+        
+    def _render_frame(self):
+        if self.window is None and self.render_mode == "human":
+            pygame.init()
+            pygame.display.init()
+            self.window = pygame.display.set_mode(
+                (self.window_size, self.window_size)
+            )
+        if self.clock is None and self.render_mode == "human":
+            self.clock = pygame.time.Clock()
+
+        canvas = pygame.Surface((self.window_size, self.window_size))
+        canvas.fill((255, 255, 255))
+        pix_square_size = (
+            self.window_size / self.size
+        )  # The size of a single grid square in pixels
+
+        # First we draw the target
+        pygame.draw.rect(
+            canvas,
+            (255, 0, 0),
+            pygame.Rect(
+                pix_square_size * self._destination_location,
+                (pix_square_size, pix_square_size),
+            ),
+        )
+        # Now we draw the agent
+        pygame.draw.circle(
+            canvas,
+            (0, 0, 255),
+            (self._driver_location + 0.5) * pix_square_size,
+            pix_square_size / 3,
+        )
+
+        # Finally, add some gridlines
+        for x in range(self.size + 1):
+            pygame.draw.line(
+                canvas,
+                0,
+                (0, pix_square_size * x),
+                (self.window_size, pix_square_size * x),
+                width=3,
+            )
+            pygame.draw.line(
+                canvas,
+                0,
+                (pix_square_size * x, 0),
+                (pix_square_size * x, self.window_size),
+                width=3,
+            )
+
+        if self.render_mode == "human":
+            # The following line copies our drawings from `canvas` to the visible window
+            self.window.blit(canvas, canvas.get_rect())
+            pygame.event.pump()
+            pygame.display.update()
+
+            # We need to ensure that human-rendering occurs at the predefined framerate.
+            # The following line will automatically add a delay to keep the framerate stable.
+            self.clock.tick(self.metadata["render_fps"])
+        else:  # rgb_array
+            return np.transpose(
+                np.array(pygame.surfarray.pixels3d(canvas)), axes=(1, 0, 2)
+            )
+        
+    def close(self):
+        if self.window is not None:
+            pygame.display.quit()
+            pygame.quit()
+
 # TEST ENVIRONMENT
 if __name__ == "__main__":
-    env = MapEnv(size=8)
+    env = MapEnv()
     obs, info = env.reset(seed=42)
     print("Initial observation:", obs, "info:", info)
 
@@ -101,3 +192,7 @@ if __name__ == "__main__":
             obs, info = env.reset()
     env.close()
     
+    register(
+        id="gymnasium_env/TaxiDriverMap-v0",
+        entry_point="gymnasium.env.envs:TaxiDriverMapEnv",
+    )
