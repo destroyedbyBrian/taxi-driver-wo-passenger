@@ -2,6 +2,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from Map import MapEnv
+from time import perf_counter
 
 GAMMA = 0.95 # Discount factor
 THRESHOLD = 1e-4 # Bellman residual threshold for convergence
@@ -28,6 +29,9 @@ class ValueIterationAgent:
         self.state_to_index = {state: idx for idx, state in enumerate(self.valid_states)}
         self.values = np.zeros(len(self.valid_states), dtype=float)
         self.delta_history: list[float] = []
+        self.training_sweeps = 0
+        self.training_time = 0.0
+        self.training_final_delta = float("inf")
 
     def _build_state_space(self):
         coords = [(x, y) for x in range(self.size) for y in range(self.size)]
@@ -67,6 +71,7 @@ class ValueIterationAgent:
     def train(self):
         delta = float("inf")
         iteration = 0
+        start_time = perf_counter()
         while delta > self.threshold:
             delta = 0.0
             for idx, (driver, destination) in enumerate(self.valid_states):
@@ -84,7 +89,13 @@ class ValueIterationAgent:
                 delta = max(delta, abs(old_value - best_value))
             self.delta_history.append(delta)
             iteration += 1
-        print(f"Value iteration converged in {iteration} sweeps (final delta={delta:.2e}).")
+        self.training_sweeps = iteration
+        self.training_time = perf_counter() - start_time
+        self.training_final_delta = delta
+        print(
+            f"Value iteration converged in {iteration} sweeps "
+            f"(final delta={delta:.2e}, runtime={self.training_time:.3f}s)."
+        )
 
     def _state_from_obs(self, obs):
         driver = tuple(int(x) for x in obs["driver"])
@@ -150,11 +161,14 @@ class ValueIterationAgent:
         rewards = []
         successes = []
         lengths = []
+        min_steps = []
         old_epsilon = self.epsilon
         self.epsilon = 0.0
         try:
             for _ in range(n_episodes):
                 obs, info = env.reset()
+                start_driver = obs["driver"].copy()
+                start_dest = obs["destination"].copy()
                 done = False
                 episode_reward = 0.0
                 steps = 0
@@ -167,9 +181,16 @@ class ValueIterationAgent:
                 rewards.append(episode_reward)
                 successes.append(float(terminated))
                 lengths.append(steps)
+                manhattan = np.sum(np.abs(start_driver - start_dest))
+                min_steps.append(manhattan)
         finally:
             self.epsilon = old_epsilon
-        return np.array(rewards), np.array(successes), np.array(lengths)
+        return (
+            np.array(rewards, dtype=float),
+            np.array(successes, dtype=float),
+            np.array(lengths, dtype=float),
+            np.array(min_steps, dtype=float),
+        )
 
     def _moving_average(self, data, window=5):
         if len(data) < window:
@@ -210,6 +231,36 @@ class ValueIterationAgent:
         fig.tight_layout()
         plt.show()
 
+    def summarize_metrics(self, rewards, successes, lengths, min_steps):
+        print("\n=== Value-Iteration Evaluation Summary ===")
+
+        print("-- Learning Performance --")
+        print(f"Average reward: {np.mean(rewards):.2f}")
+        print(f"Success rate:  {np.mean(successes):.1%}")
+
+        print("\n-- Policy Efficiency --")
+        valid = min_steps > 0
+        if np.any(valid):
+            efficiency = lengths[valid] / min_steps[valid]
+            print(f"Avg episode length:        {np.mean(lengths):.2f} steps")
+            print(f"Avg Manhattan lower bound: {np.mean(min_steps[valid]):.2f} steps")
+            print(f"Length / lower-bound ratio:{np.mean(efficiency):.2f}x")
+        else:
+            print("Not enough data to compute efficiency ratio.")
+
+        print("\n-- Learning Stability --")
+        if self.delta_history:
+            print(f"Initial delta: {self.delta_history[0]:.2e}")
+            print(f"Final delta:   {self.delta_history[-1]:.2e}")
+        else:
+            print("Delta history empty.")
+
+        print("\n-- Training Efficiency --")
+        print(f"Sweeps executed: {self.training_sweeps}")
+        print(f"Runtime: {self.training_time:.3f}s")
+        total_backups = self.training_sweeps * len(self.valid_states)
+        print(f"Total state backups: {total_backups}")
+
     def visualize_testing_progess(self, n_episodes=5, explore=False):
         render_env = MapEnv(render_mode="human")
         old_epsilon = self.epsilon
@@ -246,7 +297,8 @@ if __name__ == "__main__":
     agent = ValueIterationAgent(training_env)
     agent.train()
     eval_env = MapEnv(render_mode=None)
-    rewards, successes, lengths = agent.evaluate_policy(eval_env, n_episodes=50)
+    rewards, successes, lengths, min_steps = agent.evaluate_policy(eval_env, n_episodes=50)
+    agent.summarize_metrics(rewards, successes, lengths, min_steps)
     agent.test_agent(eval_env, 20000)
     agent.plot_metrics(rewards, successes)
     eval_env.close()
