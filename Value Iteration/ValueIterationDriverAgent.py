@@ -231,92 +231,81 @@ class ValueIterationAgent:
         fig.tight_layout()
         plt.show()
 
-    def plot_metric_matrix(self, rewards, successes, lengths, min_steps):
-        fig, axes = plt.subplots(2, 2, figsize=(10, 6))
-        fig.suptitle("Value Iteration Performance Matrix", fontsize=14, fontweight="bold")
+    def plot_metric_trends(self, rewards, successes, lengths, min_steps):
+        fig, axes = plt.subplots(2, 2, figsize=(12, 7))
+        fig.suptitle("Value Iteration Performance Metrics", fontsize=14, fontweight="bold")
 
-        # Learning Performance
+        # Learning performance: reward trajectory + cumulative success
         ax = axes[0][0]
-        ax.axis("off")
-        lp_text = (
-            "Learning Performance\n"
-            f"Avg reward: {np.mean(rewards):.2f}\n"
-            f"Success rate: {np.mean(successes):.1%}"
-        )
-        ax.text(
-            0.5,
-            0.5,
-            lp_text,
-            ha="center",
-            va="center",
-            fontsize=11,
-            bbox=dict(boxstyle="round", facecolor="#e0f7fa"),
-        )
+        ax.plot(rewards, label="Reward", color="#1976d2")
+        if len(rewards) >= 5:
+            ax.plot(
+                range(4, len(rewards)),
+                self._moving_average(rewards, 5),
+                label="5-ep MA",
+                color="#42a5f5",
+                linestyle="--",
+            )
+        ax.set_title("Learning Performance")
+        ax.set_xlabel("Episode")
+        ax.set_ylabel("Reward")
+        ax.grid(True, linestyle="--", alpha=0.4)
+        ax_success = ax.twinx()
+        success_curve = np.cumsum(successes) / (np.arange(len(successes)) + 1)
+        ax_success.plot(success_curve, color="#2e7d32", label="Cumulative success")
+        ax_success.set_ylabel("Success rate")
+        lines, labels = ax.get_legend_handles_labels()
+        lines2, labels2 = ax_success.get_legend_handles_labels()
+        ax.legend(lines + lines2, labels + labels2, loc="lower right")
 
-        # Policy Efficiency
+        # Policy efficiency: ratio of min steps to actual steps
         ax = axes[0][1]
-        ax.axis("off")
         valid = min_steps > 0
         if np.any(valid):
-            efficiency = lengths[valid] / min_steps[valid]
-            pe_text = (
-                "Policy Efficiency\n"
-                f"Avg length: {np.mean(lengths):.2f}\n"
-                f"Lower bound: {np.mean(min_steps[valid]):.2f}\n"
-                f"Ratio: {np.mean(efficiency):.2f}x"
-            )
-        else:
-            pe_text = "Policy Efficiency\nNot enough data"
-        ax.text(
-            0.5,
-            0.5,
-            pe_text,
-            ha="center",
-            va="center",
-            fontsize=11,
-            bbox=dict(boxstyle="round", facecolor="#f1f8e9"),
-        )
+            efficiency_ratio = np.zeros_like(lengths, dtype=float)
+            efficiency_ratio[valid] = min_steps[valid] / np.maximum(lengths[valid], 1)
+            ax.plot(efficiency_ratio, color="#7cb342")
+            ax.set_ylim(0, 1.1)
+        ax.set_title("Policy Efficiency (lower bound / actual)")
+        ax.set_xlabel("Episode")
+        ax.set_ylabel("Efficiency ratio")
+        ax.grid(True, linestyle="--", alpha=0.4)
 
-        # Learning Stability
+        # Learning stability: Bellman residual per sweep (log)
         ax = axes[1][0]
-        ax.axis("off")
         if self.delta_history:
-            stability_text = (
-                "Learning Stability\n"
-                f"Initial delta: {self.delta_history[0]:.2e}\n"
-                f"Final delta: {self.delta_history[-1]:.2e}"
-            )
-        else:
-            stability_text = "Learning Stability\nNo delta history"
-        ax.text(
-            0.5,
-            0.5,
-            stability_text,
-            ha="center",
-            va="center",
-            fontsize=11,
-            bbox=dict(boxstyle="round", facecolor="#fff3e0"),
-        )
+            ax.plot(self.delta_history, marker="o", color="#f57c00")
+            ax.set_yscale("log")
+        ax.set_title("Learning Stability (delta)")
+        ax.set_xlabel("Sweep")
+        ax.set_ylabel("Max update")
+        ax.grid(True, linestyle="--", alpha=0.4)
 
-        # Training Efficiency
+        # Training efficiency: bar chart of sweeps/time/backups
         ax = axes[1][1]
-        ax.axis("off")
         total_backups = self.training_sweeps * len(self.valid_states)
-        te_text = (
-            "Training Efficiency\n"
-            f"Sweeps: {self.training_sweeps}\n"
-            f"Runtime: {self.training_time:.2f}s\n"
-            f"Backups: {total_backups}"
+        metrics = [
+            ("Sweeps", self.training_sweeps),
+            ("Runtime (s)", self.training_time),
+            ("Backups", total_backups),
+        ]
+        bars = ax.bar(
+            [m[0] for m in metrics],
+            [m[1] for m in metrics],
+            color=["#4dd0e1", "#26c6da", "#00acc1"],
+            alpha=0.9,
         )
-        ax.text(
-            0.5,
-            0.5,
-            te_text,
-            ha="center",
-            va="center",
-            fontsize=11,
-            bbox=dict(boxstyle="round", facecolor="#fce4ec"),
-        )
+        for bar, (_, value) in zip(bars, metrics):
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height(),
+                f"{value:.2f}" if isinstance(value, float) else f"{int(value)}",
+                ha="center",
+                va="bottom",
+                fontsize=10,
+            )
+        ax.set_title("Training Efficiency")
+        ax.grid(True, axis="y", linestyle="--", alpha=0.4)
 
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         plt.show()
@@ -391,7 +380,7 @@ if __name__ == "__main__":
     agent.summarize_metrics(rewards, successes, lengths, min_steps)
     agent.test_agent(eval_env, 20000)
     agent.plot_metrics(rewards, successes)
-    agent.plot_metric_matrix(rewards, successes, lengths, min_steps)
+    agent.plot_metric_trends(rewards, successes, lengths, min_steps)
     eval_env.close()
     agent.visualize_testing_progess(10)
     training_env.close()
