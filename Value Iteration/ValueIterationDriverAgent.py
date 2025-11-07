@@ -3,10 +3,10 @@ import numpy as np
 from matplotlib import pyplot as plt
 from Map import MapEnv
 
-GAMMA = 0.95
-THRESHOLD = 1e-4
-EPSILON = 0.05
-MAX_EVAL_STEPS = 200
+GAMMA = 0.95 # Discount factor
+THRESHOLD = 1e-4 # Bellman residual threshold for convergence
+EPSILON = 0.05 # Exploration rate for epsilon-greedy policy
+MAX_EVAL_STEPS = 200 # Max steps per episode during evaluation
 
 ACTIONS = {
     0: np.array([1, 0]),   # Right
