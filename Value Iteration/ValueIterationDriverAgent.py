@@ -231,6 +231,96 @@ class ValueIterationAgent:
         fig.tight_layout()
         plt.show()
 
+    def plot_metric_matrix(self, rewards, successes, lengths, min_steps):
+        fig, axes = plt.subplots(2, 2, figsize=(10, 6))
+        fig.suptitle("Value Iteration Performance Matrix", fontsize=14, fontweight="bold")
+
+        # Learning Performance
+        ax = axes[0][0]
+        ax.axis("off")
+        lp_text = (
+            "Learning Performance\n"
+            f"Avg reward: {np.mean(rewards):.2f}\n"
+            f"Success rate: {np.mean(successes):.1%}"
+        )
+        ax.text(
+            0.5,
+            0.5,
+            lp_text,
+            ha="center",
+            va="center",
+            fontsize=11,
+            bbox=dict(boxstyle="round", facecolor="#e0f7fa"),
+        )
+
+        # Policy Efficiency
+        ax = axes[0][1]
+        ax.axis("off")
+        valid = min_steps > 0
+        if np.any(valid):
+            efficiency = lengths[valid] / min_steps[valid]
+            pe_text = (
+                "Policy Efficiency\n"
+                f"Avg length: {np.mean(lengths):.2f}\n"
+                f"Lower bound: {np.mean(min_steps[valid]):.2f}\n"
+                f"Ratio: {np.mean(efficiency):.2f}x"
+            )
+        else:
+            pe_text = "Policy Efficiency\nNot enough data"
+        ax.text(
+            0.5,
+            0.5,
+            pe_text,
+            ha="center",
+            va="center",
+            fontsize=11,
+            bbox=dict(boxstyle="round", facecolor="#f1f8e9"),
+        )
+
+        # Learning Stability
+        ax = axes[1][0]
+        ax.axis("off")
+        if self.delta_history:
+            stability_text = (
+                "Learning Stability\n"
+                f"Initial delta: {self.delta_history[0]:.2e}\n"
+                f"Final delta: {self.delta_history[-1]:.2e}"
+            )
+        else:
+            stability_text = "Learning Stability\nNo delta history"
+        ax.text(
+            0.5,
+            0.5,
+            stability_text,
+            ha="center",
+            va="center",
+            fontsize=11,
+            bbox=dict(boxstyle="round", facecolor="#fff3e0"),
+        )
+
+        # Training Efficiency
+        ax = axes[1][1]
+        ax.axis("off")
+        total_backups = self.training_sweeps * len(self.valid_states)
+        te_text = (
+            "Training Efficiency\n"
+            f"Sweeps: {self.training_sweeps}\n"
+            f"Runtime: {self.training_time:.2f}s\n"
+            f"Backups: {total_backups}"
+        )
+        ax.text(
+            0.5,
+            0.5,
+            te_text,
+            ha="center",
+            va="center",
+            fontsize=11,
+            bbox=dict(boxstyle="round", facecolor="#fce4ec"),
+        )
+
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        plt.show()
+
     def summarize_metrics(self, rewards, successes, lengths, min_steps):
         print("\n=== Value-Iteration Evaluation Summary ===")
 
@@ -301,6 +391,7 @@ if __name__ == "__main__":
     agent.summarize_metrics(rewards, successes, lengths, min_steps)
     agent.test_agent(eval_env, 20000)
     agent.plot_metrics(rewards, successes)
+    agent.plot_metric_matrix(rewards, successes, lengths, min_steps)
     eval_env.close()
     agent.visualize_testing_progess(10)
     training_env.close()
