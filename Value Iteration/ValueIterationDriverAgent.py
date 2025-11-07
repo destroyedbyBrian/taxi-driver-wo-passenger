@@ -9,10 +9,10 @@ EPSILON = 0.05
 MAX_EVAL_STEPS = 200
 
 ACTIONS = {
-    0: np.array([1, 0]),   # right
-    1: np.array([0, 1]),   # up
-    2: np.array([-1, 0]),  # left
-    3: np.array([0, -1]),  # down
+    0: np.array([1, 0]),   # Right
+    1: np.array([0, 1]),   # Up
+    2: np.array([-1, 0]),  # Left
+    3: np.array([0, -1]),  # Down
 }
 
 
@@ -146,7 +146,7 @@ class ValueIterationAgent:
         print(f"Average Episode Length: {average_length:.1f}")
         print(f"Std Episode Length: {np.std(episode_lengths):.1f}")
 
-    def evaluate_policy(self, env, n_episodes=20):
+    def evaluate_policy(self, env, n_episodes=20000):
         rewards = []
         successes = []
         lengths = []
@@ -247,7 +247,7 @@ if __name__ == "__main__":
     agent.train()
     eval_env = MapEnv(render_mode=None)
     rewards, successes, lengths = agent.evaluate_policy(eval_env, n_episodes=50)
-    agent.test_agent(eval_env, 100)
+    agent.test_agent(eval_env, 20000)
     agent.plot_metrics(rewards, successes)
     eval_env.close()
     agent.visualize_testing_progess(10)
