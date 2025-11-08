@@ -339,6 +339,83 @@ class ValueIterationAgent:
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         plt.show()
 
+    def plot_training_dashboard(self, rewards, successes, lengths):
+        if len(rewards) == 0:
+            print("No rollout data available for dashboard plotting.")
+            return
+
+        success_curve = np.cumsum(successes) / (np.arange(len(successes)) + 1)
+        cumulative_reward = np.cumsum(rewards)
+        moving_avg = self._moving_average(rewards, 5) if len(rewards) >= 5 else None
+        epsilon_curve = np.full(len(rewards), self.epsilon, dtype=float)
+
+        fig, axes = plt.subplots(2, 3, figsize=(15, 7))
+        fig.suptitle("Value Iteration Training Metrics", fontsize=14, fontweight="bold")
+
+        ax = axes[0][0]
+        ax.plot(rewards, label="Episode reward", color="#2962ff")
+        if moving_avg is not None:
+            ax.plot(range(4, len(rewards)), moving_avg, label="5-ep moving avg", color="#ff8f00")
+        ax.set_title("Episode Reward")
+        ax.set_xlabel("Episode")
+        ax.set_ylabel("Reward")
+        ax.grid(True, linestyle="--", alpha=0.4)
+        ax.legend()
+
+        ax = axes[0][1]
+        ax.plot(success_curve, color="#2e7d32")
+        ax.set_ylim(0, 1.05)
+        ax.set_title("Success Rate Over Time")
+        ax.set_xlabel("Episode")
+        ax.set_ylabel("Success rate")
+        ax.grid(True, linestyle="--", alpha=0.4)
+
+        ax = axes[0][2]
+        ax.plot(lengths, color="#c62828")
+        ax.set_title("Steps per Episode")
+        ax.set_xlabel("Episode")
+        ax.set_ylabel("Steps")
+        ax.grid(True, linestyle="--", alpha=0.4)
+
+        ax = axes[1][0]
+        ax.plot(cumulative_reward, color="#6a1b9a")
+        ax.set_title("Cumulative Reward")
+        ax.set_xlabel("Episode")
+        ax.set_ylabel("Reward sum")
+        ax.grid(True, linestyle="--", alpha=0.4)
+
+        ax = axes[1][1]
+        if self.delta_history:
+            ax.plot(self.delta_history, marker="o", color="#f57c00")
+            ax.set_title("Learning Stability (delta)")
+            ax.set_xlabel("Sweep")
+            ax.set_ylabel("Max update")
+            ax.grid(True, linestyle="--", alpha=0.4)
+        else:
+            ax.text(0.5, 0.5, "No convergence data", ha="center", va="center")
+            ax.set_axis_off()
+
+        ax = axes[1][2]
+        ax.plot(range(len(epsilon_curve)), epsilon_curve, color="#00897b")
+        ax.set_ylim(0, max(0.1, self.epsilon * 1.5))
+        ax.set_title("Exploration Rate")
+        ax.set_xlabel("Episode")
+        ax.set_ylabel("ε")
+        ax.grid(True, linestyle="--", alpha=0.4)
+        ax.text(
+            0.5,
+            0.15,
+            "Constant for VI (planning)",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+            fontsize=9,
+            color="#004d40",
+        )
+
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        plt.show()
+
     def summarize_metrics(self, rewards, successes, lengths, min_steps):
         print("\n=== Value-Iteration Evaluation Summary ===")
 
@@ -398,6 +475,7 @@ def run_training_and_diagnostics(
     }
     agent.plot_basic_curves(rewards)
     agent.plot_metric_trends(rewards, successes, lengths, min_steps)
+    agent.plot_training_dashboard(rewards, successes, lengths)
 
     if test_rollouts:
         agent.test_agent(eval_env, n_episodes=test_rollouts)
@@ -425,6 +503,7 @@ if __name__ == "__main__":
     agent.plot_metric_trends(
         rollouts["rewards"], rollouts["successes"], rollouts["lengths"], rollouts["min_steps"]
     )
+    agent.plot_training_dashboard(rollouts["rewards"], rollouts["successes"], rollouts["lengths"])
 
     # Optional interactive visualization
     # agent.visualize_testing_progress(5)
