@@ -228,33 +228,37 @@ class ValueIterationAgent:
         return np.convolve(data, kernel, mode="valid")
 
     def plot_basic_curves(self, rewards):
-        if not self.delta_history:
-            print("Delta history empty, skipping convergence plot.")
-        else:
-            plt.figure(figsize=(10, 5))
-            plt.plot(self.delta_history, color="tab:blue")
-            plt.xlabel("Sweep")
-            plt.ylabel("Bellman residual (delta)")
-            plt.title("Value Iteration: Convergence over Time")
-            plt.grid(True, linestyle="--", alpha=0.4)
-            plt.tight_layout()
-            plt.show()
-
-        if len(rewards) == 0:
-            print("No reward data available for plotting.")
+        if not self.delta_history and len(rewards) == 0:
+            print("No data available to plot.")
             return
 
-        plt.figure(figsize=(10, 5))
-        plt.plot(range(len(rewards)), rewards, color="tab:green", label="Episode reward")
-        if len(rewards) >= 5:
-            ma = self._moving_average(rewards, 5)
-            plt.plot(range(4, len(rewards)), ma, label="5-ep moving avg", color="tab:orange")
-        plt.xlabel("Episode")
-        plt.ylabel("Reward")
-        plt.title("Value Iteration: Reward Over Time")
-        plt.grid(True, linestyle="--", alpha=0.4)
-        plt.legend()
-        plt.tight_layout()
+        fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+
+        if self.delta_history:
+            axes[0].plot(self.delta_history, color="tab:blue")
+            axes[0].set_xlabel("Sweep")
+            axes[0].set_ylabel("Bellman residual (delta)")
+            axes[0].set_title("Convergence over Time")
+            axes[0].grid(True, linestyle="--", alpha=0.4)
+        else:
+            axes[0].axis("off")
+            axes[0].text(0.5, 0.5, "No convergence data", ha="center", va="center")
+
+        if len(rewards) > 0:
+            axes[1].plot(range(len(rewards)), rewards, color="tab:green", label="Episode reward")
+            if len(rewards) >= 5:
+                ma = self._moving_average(rewards, 5)
+                axes[1].plot(range(4, len(rewards)), ma, label="5-ep moving avg", color="tab:orange")
+            axes[1].set_xlabel("Episode")
+            axes[1].set_ylabel("Reward")
+            axes[1].set_title("Reward over Time")
+            axes[1].grid(True, linestyle="--", alpha=0.4)
+            axes[1].legend()
+        else:
+            axes[1].axis("off")
+            axes[1].text(0.5, 0.5, "No reward data", ha="center", va="center")
+
+        fig.tight_layout()
         plt.show()
 
     def plot_metric_trends(self, rewards, successes, lengths, min_steps):
